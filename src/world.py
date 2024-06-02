@@ -1,10 +1,17 @@
 import glm
 
+class Object:
+    def __init__(self, pos, size, color):
+        self.pos = pos
+        self.size = size
+        self.color = color
+
 class World:
     def __init__(self, dim):
         self.dim = dim
         self.pos = glm.vec3(-dim / 2, -dim / 2, -dim / 2)
         self.voxels = self.gen_empty_voxel_array()
+        self.genned_objects = []
 
     def is_in_bounds(self, pos):
         return 0 <= pos.x < self.dim and 0 <= pos.y < self.dim and 0 <= pos.z < self.dim
@@ -28,6 +35,7 @@ class World:
                 for z in range(int(size.z)):
                     if self.is_in_bounds(pos + glm.vec3(x, y, z)):
                         self.voxels[int(pos.x) + x][int(pos.y) + y][int(pos.z) + z] = block
+        self.genned_objects.append(Object(pos, size, block))
 
     def gen_sphere(self, pos, radius, block):
         for x in range(-radius, radius + 1):
@@ -36,3 +44,4 @@ class World:
                     if glm.length(glm.vec3(x, y, z)) <= radius:
                         if self.is_in_bounds(pos + glm.vec3(x, y, z)):
                             self.voxels[int(pos.x) + x][int(pos.y) + y][int(pos.z) + z] = block
+        self.genned_objects.append(Object(pos, glm.vec3(radius * 2), block))
