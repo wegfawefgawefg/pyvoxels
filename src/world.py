@@ -9,12 +9,16 @@ class Object:
 class World:
     def __init__(self, dim):
         self.dim = dim
-        self.pos = glm.vec3(-dim / 2, -dim / 2, -dim / 2)
+        # self.pos = glm.vec3(-dim / 2, -dim / 2, -dim / 2)
+        self.pos = glm.vec3(0, 0, 0)
         self.voxels = self.gen_empty_voxel_array()
         self.genned_objects = []
 
     def is_in_bounds(self, pos):
         return 0 <= pos.x < self.dim and 0 <= pos.y < self.dim and 0 <= pos.z < self.dim
+
+    def get_center(self):
+        return glm.vec3(self.dim / 2)
 
     def reset(self):
         self.voxels = self.gen_empty_voxel_array()
@@ -45,3 +49,15 @@ class World:
                         if self.is_in_bounds(pos + glm.vec3(x, y, z)):
                             self.voxels[int(pos.x) + x][int(pos.y) + y][int(pos.z) + z] = block
         self.genned_objects.append(Object(pos, glm.vec3(radius * 2), block))
+
+    def get_floor_level(self):
+        return int(self.dim - 1)
+    
+    def get_above_floor_level(self):
+        return int(self.dim - 2)
+
+    def gen_floor(self, block):
+        floor_level = int(self.dim - 1)
+        for x in range(self.dim):
+            for z in range(self.dim):
+                self.voxels[x][floor_level][z] = block

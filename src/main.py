@@ -1,22 +1,36 @@
 import copy
 import math
+
 import pygame
 import glm
+
 from world import World
 from camera import Camera
 from viewplane import Viewplane
+from utils import v2totuple
+
 
 pygame.init()
 
 render_resolution = glm.vec2(64, 48)
-window_size = render_resolution * 12
+window_size = render_resolution * 8
 
-world = World(2)
-world.gen_cube(glm.vec3(0, 0, 0), glm.vec3(2, 2, 2), True)
-camera = Camera(glm.vec3(0, 0, 0), glm.vec3(0, 0, -1), 4.69)
+world = World(8)
+world.gen_floor(True)
+world.gen_cube(glm.vec3(1, world.get_above_floor_level()-1, 1), glm.vec3(1, 2, 1), (255, 0, 0))
+
+# put a cube in the 4 corners
+# white
+cube_color = (255, 255, 255)
+world.gen_cube(glm.vec3(0, world.get_above_floor_level(), 0), glm.vec3(1, 1, 1), cube_color)
+world.gen_cube(glm.vec3(0, world.get_above_floor_level(), world.dim - 1), glm.vec3(1, 1, 1), cube_color)
+world.gen_cube(glm.vec3(world.dim - 1, world.get_above_floor_level(), 0), glm.vec3(1, 1, 1), cube_color)
+world.gen_cube(glm.vec3(world.dim - 1, world.get_above_floor_level(), world.dim - 1), glm.vec3(1, 1, 1), cube_color)
+
+camera = Camera(glm.vec3(0, 2.4, 0), glm.vec3(0, 0, -1), 3.0)
 viewplane = Viewplane(glm.vec2(4, 3), render_resolution.x / render_resolution.y)
 
-NUM_RAY_STEPS = 40
+NUM_RAY_STEPS = 24
 MARCH_STEP_SIZE = 0.5
 
 def mouse_pos():
@@ -26,9 +40,10 @@ def step():
     tm = 1.0
     t = pygame.time.get_ticks() / 1000 * tm
     orbit_radius = 10
-    camera.dir = -glm.vec3(math.sin(t), 0, math.cos(t))
+    orbit_center = world.get_center()
     cam_height = camera.pos.y
-    camera.pos = glm.vec3(math.sin(t) * orbit_radius, 0, math.cos(t) * orbit_radius)
+    camera.pos = glm.vec3(math.sin(t) * orbit_radius, 0, math.cos(t) * orbit_radius) + orbit_center
+    camera.dir = glm.normalize(world.get_center() - camera.pos)
     camera.pos.y = cam_height
 
     # move the camera
@@ -51,9 +66,9 @@ def step():
         camera.dir = glm.rotate(camera.dir, -rotation_speed, glm.vec3(0, 1, 0))
     # space for up, and shift for down
     if keys[pygame.K_SPACE]:
-        camera.pos += glm.vec3(0, cam_speed, 0)
-    if keys[pygame.K_LSHIFT]:
         camera.pos -= glm.vec3(0, cam_speed, 0)
+    if keys[pygame.K_LSHIFT]:
+        camera.pos += glm.vec3(0, cam_speed, 0)
 
     # reset pos on r press
     if keys[pygame.K_r]:
@@ -82,13 +97,17 @@ def draw(surface):
             pos_in_world_space = pos - world.pos
             wp = glm.floor(pos_in_world_space)
             if world.is_in_bounds(wp):
-                if world.voxels[int(wp.x)][int(wp.y)][int(wp.z)]:
+                voxel = world.voxels[int(wp.x)][int(wp.y)][int(wp.z)]
+                if voxel is not None:
                     hit = True
                     dist_to_hit = glm.length(pos - camera.pos)
                     break
         color = (0, 0, 0)
         if hit:
-            color = (255, 255, 255)
+            if voxel == True:
+                color = (255, 255, 255)
+            else:
+                color = voxel
             brightness = 1 - dist_to_hit / (NUM_RAY_STEPS * MARCH_STEP_SIZE)
             color = tuple(int(c * brightness) for c in color)
         pygame.draw.rect(surface, color, (x, y, 1, 1))
@@ -103,8 +122,9 @@ def draw(surface):
 
 def draw_map(surface):
     # Minimap parameters
-    map_offset = glm.vec2(10, 10)
-    map_scale = 8
+    map_offset = glm.vec2(world.get_center().x, world.get_center().z)
+    map_offset += glm.vec2(5, 5)
+    map_scale = 4
 
     # Draw the camera
     cam_pos = glm.vec2(camera.pos.x, camera.pos.z) * map_scale + map_offset * map_scale
@@ -136,12 +156,12 @@ def draw_map(surface):
 
 def main():
     # first person view
-    window = pygame.display.set_mode(window_size.to_tuple())
-    render_surface = pygame.Surface(render_resolution.to_tuple())
+    window = pygame.display.set_mode(v2totuple(window_size), pygame.HWSURFACE)
+    render_surface = pygame.Surface(v2totuple(render_resolution), pygame.HWSURFACE)
 
     # map view
-    map_resolution = glm.vec2(200, 200)
-    map_render_surface = pygame.Surface(map_resolution.to_tuple())
+    map_resolution = glm.vec2(100, 100)
+    map_render_surface = pygame.Surface(v2totuple(map_resolution), pygame.HWSURFACE)
 
     running = True
     while running:
@@ -154,16 +174,17 @@ def main():
         draw(render_surface)
 
         stretched_surface = pygame.transform.scale(render_surface, window_size)
-        y_flip_surface = pygame.transform.flip(stretched_surface, False, True)
-        window.blit(y_flip_surface, (0, 0))
+        window.blit(stretched_surface, (0, 0))
 
         map_render_surface.fill((0, 0, 0))
         draw_map(map_render_surface)
 
         # put the map in the bottom right corner
-        map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / 3), int(window_size.y / 3)))
+        map_fraction = 4 # one eighth of the window size
+        # map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / 3), int(window_size.y / 3)))
+        map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / map_fraction), int(window_size.y / map_fraction)))
+        # window.blit(map_stretched_surface, (window_size.x - map_stretched_surface.get_width(), window_size.y - map_stretched_surface.get_height()))
         window.blit(map_stretched_surface, (window_size.x - map_stretched_surface.get_width(), window_size.y - map_stretched_surface.get_height()))
-
         pygame.display.update()
 
     pygame.quit()
