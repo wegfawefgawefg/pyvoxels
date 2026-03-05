@@ -19,6 +19,10 @@ uv run --active main
 
 ![pyvoxels screenshot](assets/image.png)
 
+## Docs
+
+- [Rendering Notes](docs/rendering-notes.md)
+
 ## Archive Notes
 
 - First commit: `45b4f7e88a55f127457b473650b5698da750682b`
