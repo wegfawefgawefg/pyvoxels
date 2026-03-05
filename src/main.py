@@ -1,4 +1,5 @@
 import copy
+import enum
 import math
 
 import pygame
@@ -12,39 +13,70 @@ from utils import v2totuple
 
 pygame.init()
 
+
+class Mode(enum.Enum):
+    FLIGHT = enum.auto()
+    ORBIT = enum.auto()
+
+
+mode = Mode.ORBIT
+
 render_resolution = glm.vec2(64, 48)
 window_size = render_resolution * 8
 
 world = World(8)
 world.gen_floor(True)
-world.gen_cube(glm.vec3(1, world.get_above_floor_level()-1, 1), glm.vec3(1, 2, 1), (255, 0, 0))
+world.gen_cube(
+    glm.vec3(1, world.get_above_floor_level() - 1, 1), glm.vec3(1, 2, 1), (255, 0, 0)
+)
 
 # put a cube in the 4 corners
 # white
 cube_color = (255, 255, 255)
-world.gen_cube(glm.vec3(0, world.get_above_floor_level(), 0), glm.vec3(1, 1, 1), cube_color)
-world.gen_cube(glm.vec3(0, world.get_above_floor_level(), world.dim - 1), glm.vec3(1, 1, 1), cube_color)
-world.gen_cube(glm.vec3(world.dim - 1, world.get_above_floor_level(), 0), glm.vec3(1, 1, 1), cube_color)
-world.gen_cube(glm.vec3(world.dim - 1, world.get_above_floor_level(), world.dim - 1), glm.vec3(1, 1, 1), cube_color)
+world.gen_cube(
+    glm.vec3(0, world.get_above_floor_level(), 0), glm.vec3(1, 1, 1), cube_color
+)
+world.gen_cube(
+    glm.vec3(0, world.get_above_floor_level(), world.dim - 1),
+    glm.vec3(1, 1, 1),
+    cube_color,
+)
+world.gen_cube(
+    glm.vec3(world.dim - 1, world.get_above_floor_level(), 0),
+    glm.vec3(1, 1, 1),
+    cube_color,
+)
+world.gen_cube(
+    glm.vec3(world.dim - 1, world.get_above_floor_level(), world.dim - 1),
+    glm.vec3(1, 1, 1),
+    cube_color,
+)
 
 camera = Camera(glm.vec3(0, 2.4, 0), glm.vec3(0, 0, -1), 3.0)
 viewplane = Viewplane(glm.vec2(4, 3), render_resolution.x / render_resolution.y)
 
-NUM_RAY_STEPS = 24
-MARCH_STEP_SIZE = 0.5
+NUM_RAY_STEPS = 48
+MARCH_STEP_SIZE = 0.25
+
 
 def mouse_pos():
     return glm.vec2(pygame.mouse.get_pos()) / window_size * render_resolution
 
+
 def step():
-    tm = 1.0
-    t = pygame.time.get_ticks() / 1000 * tm
-    orbit_radius = 10
-    orbit_center = world.get_center()
-    cam_height = camera.pos.y
-    camera.pos = glm.vec3(math.sin(t) * orbit_radius, 0, math.cos(t) * orbit_radius) + orbit_center
-    camera.dir = glm.normalize(world.get_center() - camera.pos)
-    camera.pos.y = cam_height
+    global mode
+    if mode == Mode.ORBIT:
+        tm = 1.0
+        t = pygame.time.get_ticks() / 1000 * tm
+        orbit_radius = 10
+        orbit_center = world.get_center()
+        cam_height = camera.pos.y
+        camera.pos = (
+            glm.vec3(math.sin(t) * orbit_radius, 0, math.cos(t) * orbit_radius)
+            + orbit_center
+        )
+        camera.dir = glm.normalize(world.get_center() - camera.pos)
+        camera.pos.y = cam_height
 
     # move the camera
     # forward with w, back with s, rotate with a and d
@@ -73,15 +105,38 @@ def step():
     # reset pos on r press
     if keys[pygame.K_r]:
         camera.reset()
-        
+
+    # change mode on m press
+    if keys[pygame.K_m]:
+        if mode == Mode.FLIGHT:
+            mode = Mode.ORBIT
+        else:
+            mode = Mode.FLIGHT
+
     # t and g to move the viewplane closer and further
     if keys[pygame.K_t]:
         camera.viewplane_distance -= 0.1
     if keys[pygame.K_g]:
         camera.viewplane_distance += 0.1
 
+    # look via the mouse
+    mouse_speed = 0.001
+    if pygame.mouse.get_pressed()[0]:
+        mouse_delta = glm.vec2(pygame.mouse.get_rel())
+        camera.dir = glm.rotate(
+            camera.dir, -mouse_delta.x * mouse_speed, glm.vec3(0, 1, 0)
+        )
+        camera.dir = glm.rotate(
+            camera.dir,
+            -mouse_delta.y * mouse_speed,
+            glm.cross(camera.dir, glm.vec3(0, 1, 0)),
+        )
+
     # print the cam pos
-    print(f"Camera pos: {camera.pos}, dir: {camera.dir}, vpd: {camera.viewplane_distance}")
+    print(
+        f"Camera pos: {camera.pos}, dir: {camera.dir}, vpd: {camera.viewplane_distance}"
+    )
+
 
 def draw(surface):
     x = 0
@@ -116,7 +171,7 @@ def draw(surface):
         if x >= int(render_resolution.x):
             x = 0
             y += 1
-    
+
     pygame.draw.circle(surface, (0, 255, 0), mouse_pos(), 2)
 
 
@@ -141,7 +196,9 @@ def draw_map(surface):
     right = viewplane.get_right_from_perspective_of(camera)
     bottom_right = top_left + right * viewplane.size.x
     tl_flat = glm.vec2(top_left.x, top_left.z) * map_scale + map_offset * map_scale
-    br_flat = glm.vec2(bottom_right.x, bottom_right.z) * map_scale + map_offset * map_scale
+    br_flat = (
+        glm.vec2(bottom_right.x, bottom_right.z) * map_scale + map_offset * map_scale
+    )
     pygame.draw.line(surface, (255, 0, 0), tl_flat, br_flat)
 
     # Draw the world boundaries
@@ -152,7 +209,10 @@ def draw_map(surface):
     # Draw white dot on the center of each object in the world
     for obj in world.genned_objects:
         obj_pos = glm.vec2(obj.pos.x, obj.pos.z) * map_scale + map_offset * map_scale
-        pygame.draw.circle(surface, (255, 255, 255), (int(obj_pos.x), int(obj_pos.y)), 2)
+        pygame.draw.circle(
+            surface, (255, 255, 255), (int(obj_pos.x), int(obj_pos.y)), 2
+        )
+
 
 def main():
     # first person view
@@ -166,7 +226,10 @@ def main():
     running = True
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and (event.key == pygame.K_ESCAPE or event.key == pygame.K_q)):
+            if event.type == pygame.QUIT or (
+                event.type == pygame.KEYDOWN
+                and (event.key == pygame.K_ESCAPE or event.key == pygame.K_q)
+            ):
                 running = False
 
         render_surface.fill((0, 0, 0))
@@ -180,14 +243,24 @@ def main():
         draw_map(map_render_surface)
 
         # put the map in the bottom right corner
-        map_fraction = 4 # one eighth of the window size
+        map_fraction = 4  # one eighth of the window size
         # map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / 3), int(window_size.y / 3)))
-        map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / map_fraction), int(window_size.y / map_fraction)))
+        map_stretched_surface = pygame.transform.scale(
+            map_render_surface,
+            (int(window_size.x / map_fraction), int(window_size.y / map_fraction)),
+        )
         # window.blit(map_stretched_surface, (window_size.x - map_stretched_surface.get_width(), window_size.y - map_stretched_surface.get_height()))
-        window.blit(map_stretched_surface, (window_size.x - map_stretched_surface.get_width(), window_size.y - map_stretched_surface.get_height()))
+        window.blit(
+            map_stretched_surface,
+            (
+                window_size.x - map_stretched_surface.get_width(),
+                window_size.y - map_stretched_surface.get_height(),
+            ),
+        )
         pygame.display.update()
 
     pygame.quit()
+
 
 if __name__ == "__main__":
     main()
