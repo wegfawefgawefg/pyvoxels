@@ -22,7 +22,7 @@ class Mode(enum.Enum):
 mode = Mode.ORBIT
 
 render_resolution = glm.vec2(64, 48)
-window_size = render_resolution * 8
+window_size = glm.vec2(800, 600)
 
 world = World(8)
 world.gen_floor(True)
@@ -57,10 +57,6 @@ viewplane = Viewplane(glm.vec2(4, 3), render_resolution.x / render_resolution.y)
 
 NUM_RAY_STEPS = 48
 MARCH_STEP_SIZE = 0.25
-
-
-def mouse_pos():
-    return glm.vec2(pygame.mouse.get_pos()) / window_size * render_resolution
 
 
 def step():
@@ -132,13 +128,8 @@ def step():
             glm.cross(camera.dir, glm.vec3(0, 1, 0)),
         )
 
-    # print the cam pos
-    print(
-        f"Camera pos: {camera.pos}, dir: {camera.dir}, vpd: {camera.viewplane_distance}"
-    )
 
-
-def draw(surface):
+def draw_world(surface):
     x = 0
     y = 0
     for target in viewplane.get_targets(camera, render_resolution):
@@ -171,8 +162,6 @@ def draw(surface):
         if x >= int(render_resolution.x):
             x = 0
             y += 1
-
-    pygame.draw.circle(surface, (0, 255, 0), mouse_pos(), 2)
 
 
 def draw_map(surface):
@@ -214,17 +203,57 @@ def draw_map(surface):
         )
 
 
+def draw_ui(surface, map_surface, font, fps):
+    # draw crosshair in full-resolution UI space
+    cx = int(window_size.x // 2)
+    cy = int(window_size.y // 2)
+    pygame.draw.line(surface, (0, 255, 0), (cx - 7, cy), (cx + 7, cy), 1)
+    pygame.draw.line(surface, (0, 255, 0), (cx, cy - 7), (cx, cy + 7), 1)
+
+    # draw text stats in full-resolution UI space
+    lines = [
+        f"FPS: {fps:.1f}",
+        f"Mode: {mode.name}",
+        f"Cam: ({camera.pos.x:.2f}, {camera.pos.y:.2f}, {camera.pos.z:.2f})",
+        f"Dir: ({camera.dir.x:.2f}, {camera.dir.y:.2f}, {camera.dir.z:.2f})",
+        f"Ray steps: {NUM_RAY_STEPS}, step: {MARCH_STEP_SIZE:.2f}",
+    ]
+    text_x = 10
+    text_y = 10
+    for line in lines:
+        text_surface = font.render(line, True, (255, 255, 255))
+        shadow_surface = font.render(line, True, (0, 0, 0))
+        surface.blit(shadow_surface, (text_x + 1, text_y + 1))
+        surface.blit(text_surface, (text_x, text_y))
+        text_y += text_surface.get_height() + 4
+
+    map_margin = 8
+    map_pos = (
+        int(window_size.x - map_surface.get_width() - map_margin),
+        int(window_size.y - map_surface.get_height() - map_margin),
+    )
+    surface.blit(map_surface, map_pos)
+
+
 def main():
     # first person view
     window = pygame.display.set_mode(v2totuple(window_size), pygame.HWSURFACE)
     render_surface = pygame.Surface(v2totuple(render_resolution), pygame.HWSURFACE)
 
-    # map view
-    map_resolution = glm.vec2(100, 100)
-    map_render_surface = pygame.Surface(v2totuple(map_resolution), pygame.HWSURFACE)
+    # full-res UI resources
+    map_fraction = 4
+    map_resolution = glm.vec2(
+        int(window_size.x / map_fraction), int(window_size.y / map_fraction)
+    )
+    map_render_surface = pygame.Surface(v2totuple(map_resolution), pygame.SRCALPHA)
+    stats_font = pygame.font.SysFont("Consolas", 18)
+    clock = pygame.time.Clock()
 
     running = True
     while running:
+        clock.tick()
+        fps = clock.get_fps()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (
                 event.type == pygame.KEYDOWN
@@ -234,29 +263,14 @@ def main():
 
         render_surface.fill((0, 0, 0))
         step()
-        draw(render_surface)
+        draw_world(render_surface)
 
         stretched_surface = pygame.transform.scale(render_surface, window_size)
         window.blit(stretched_surface, (0, 0))
 
-        map_render_surface.fill((0, 0, 0))
+        map_render_surface.fill((0, 0, 0, 160))
         draw_map(map_render_surface)
-
-        # put the map in the bottom right corner
-        map_fraction = 4  # one eighth of the window size
-        # map_stretched_surface = pygame.transform.scale(map_render_surface, (int(window_size.x / 3), int(window_size.y / 3)))
-        map_stretched_surface = pygame.transform.scale(
-            map_render_surface,
-            (int(window_size.x / map_fraction), int(window_size.y / map_fraction)),
-        )
-        # window.blit(map_stretched_surface, (window_size.x - map_stretched_surface.get_width(), window_size.y - map_stretched_surface.get_height()))
-        window.blit(
-            map_stretched_surface,
-            (
-                window_size.x - map_stretched_surface.get_width(),
-                window_size.y - map_stretched_surface.get_height(),
-            ),
-        )
+        draw_ui(window, map_render_surface, stats_font, fps)
         pygame.display.update()
 
     pygame.quit()
