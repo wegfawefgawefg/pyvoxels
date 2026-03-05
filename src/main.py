@@ -1,4 +1,3 @@
-import copy
 import enum
 import math
 
@@ -130,38 +129,79 @@ def step():
 
 
 def draw_world(surface):
-    x = 0
-    y = 0
-    for target in viewplane.get_targets(camera, render_resolution):
-        ray = target - camera.pos
-        ray = glm.normalize(ray)
-        hit = False
-        dist_to_hit = NUM_RAY_STEPS * MARCH_STEP_SIZE
-        pos = copy.copy(camera.pos)
-        for i in range(NUM_RAY_STEPS):
-            pos += ray * MARCH_STEP_SIZE
-            pos_in_world_space = pos - world.pos
-            wp = glm.floor(pos_in_world_space)
-            if world.is_in_bounds(wp):
-                voxel = world.voxels[int(wp.x)][int(wp.y)][int(wp.z)]
-                if voxel is not None:
-                    hit = True
-                    dist_to_hit = glm.length(pos - camera.pos)
-                    break
-        color = (0, 0, 0)
-        if hit:
-            if voxel == True:
-                color = (255, 255, 255)
-            else:
-                color = voxel
-            brightness = 1 - dist_to_hit / (NUM_RAY_STEPS * MARCH_STEP_SIZE)
-            color = tuple(int(c * brightness) for c in color)
-        pygame.draw.rect(surface, color, (x, y, 1, 1))
+    width = int(render_resolution.x)
+    height = int(render_resolution.y)
+    dim = world.dim
+    voxels = world.voxels
+    world_pos = world.pos
+    step_size = MARCH_STEP_SIZE
+    num_steps = NUM_RAY_STEPS
+    max_march_distance = num_steps * step_size
+    inv_max_march_distance = 1.0 / max_march_distance if max_march_distance > 0 else 0.0
 
-        x += 1
-        if x >= int(render_resolution.x):
-            x = 0
-            y += 1
+    cam = camera.pos
+    cam_x = cam.x
+    cam_y = cam.y
+    cam_z = cam.z
+    world_x = world_pos.x
+    world_y = world_pos.y
+    world_z = world_pos.z
+
+    targets = viewplane.get_targets(camera, render_resolution)
+    pixels = pygame.PixelArray(surface)
+    black = surface.map_rgb((0, 0, 0))
+
+    try:
+        for y in range(height):
+            for x in range(width):
+                target = next(targets)
+                ray = glm.normalize(target - cam)
+                ray_x = ray.x
+                ray_y = ray.y
+                ray_z = ray.z
+
+                pos_x = cam_x
+                pos_y = cam_y
+                pos_z = cam_z
+                hit_voxel = None
+                dist_to_hit = max_march_distance
+
+                for _ in range(num_steps):
+                    pos_x += ray_x * step_size
+                    pos_y += ray_y * step_size
+                    pos_z += ray_z * step_size
+
+                    local_x = pos_x - world_x
+                    local_y = pos_y - world_y
+                    local_z = pos_z - world_z
+                    if 0 <= local_x < dim and 0 <= local_y < dim and 0 <= local_z < dim:
+                        voxel = voxels[int(local_x)][int(local_y)][int(local_z)]
+                        if voxel is not None:
+                            hit_voxel = voxel
+                            dx = pos_x - cam_x
+                            dy = pos_y - cam_y
+                            dz = pos_z - cam_z
+                            dist_to_hit = math.sqrt(dx * dx + dy * dy + dz * dz)
+                            break
+
+                if hit_voxel is None:
+                    pixels[x, y] = black
+                    continue
+
+                if hit_voxel is True:
+                    r, g, b = 255, 255, 255
+                else:
+                    r, g, b = hit_voxel
+
+                brightness = 1.0 - (dist_to_hit * inv_max_march_distance)
+                if brightness <= 0:
+                    pixels[x, y] = black
+                else:
+                    pixels[x, y] = surface.map_rgb(
+                        (int(r * brightness), int(g * brightness), int(b * brightness))
+                    )
+    finally:
+        del pixels
 
 
 def draw_map(surface):
