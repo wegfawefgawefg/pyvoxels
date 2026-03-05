@@ -59,7 +59,6 @@ MARCH_STEP_SIZE = 0.25
 
 
 def step():
-    global mode
     if mode == Mode.ORBIT:
         tm = 1.0
         t = pygame.time.get_ticks() / 1000 * tm
@@ -88,9 +87,9 @@ def step():
     if keys[pygame.K_s]:
         camera.pos -= camera.dir * cam_speed
     if keys[pygame.K_a]:
-        camera.dir = glm.rotate(camera.dir, rotation_speed, glm.vec3(0, 1, 0))
-    if keys[pygame.K_d]:
         camera.dir = glm.rotate(camera.dir, -rotation_speed, glm.vec3(0, 1, 0))
+    if keys[pygame.K_d]:
+        camera.dir = glm.rotate(camera.dir, rotation_speed, glm.vec3(0, 1, 0))
     # space for up, and shift for down
     if keys[pygame.K_SPACE]:
         camera.pos -= glm.vec3(0, cam_speed, 0)
@@ -101,13 +100,6 @@ def step():
     if keys[pygame.K_r]:
         camera.reset()
 
-    # change mode on m press
-    if keys[pygame.K_m]:
-        if mode == Mode.FLIGHT:
-            mode = Mode.ORBIT
-        else:
-            mode = Mode.FLIGHT
-
     # t and g to move the viewplane closer and further
     if keys[pygame.K_t]:
         camera.viewplane_distance -= 0.1
@@ -115,9 +107,9 @@ def step():
         camera.viewplane_distance += 0.1
 
     # look via the mouse
+    mouse_delta = glm.vec2(pygame.mouse.get_rel())
     mouse_speed = 0.001
-    if pygame.mouse.get_pressed()[0]:
-        mouse_delta = glm.vec2(pygame.mouse.get_rel())
+    if mode == Mode.FLIGHT and pygame.mouse.get_pressed()[0]:
         camera.dir = glm.rotate(
             camera.dir, -mouse_delta.x * mouse_speed, glm.vec3(0, 1, 0)
         )
@@ -276,6 +268,7 @@ def draw_ui(surface, map_surface, font, fps):
 
 
 def main():
+    global mode
     # first person view
     window = pygame.display.set_mode(v2totuple(window_size), pygame.HWSURFACE)
     render_surface = pygame.Surface(v2totuple(render_resolution), pygame.HWSURFACE)
@@ -300,6 +293,8 @@ def main():
                 and (event.key == pygame.K_ESCAPE or event.key == pygame.K_q)
             ):
                 running = False
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
+                mode = Mode.ORBIT if mode == Mode.FLIGHT else Mode.FLIGHT
 
         render_surface.fill((0, 0, 0))
         step()
